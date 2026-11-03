@@ -2129,7 +2129,8 @@ async function crearHojaPedido(consec){
     cx.fillStyle="#24558A";cx.font="700 36px 'Baloo 2', Arial, sans-serif";
     cx.textAlign="center";cx.fillText("¡Gracias por tu compra!",540,y+244);
     cx.fillStyle="#657386";cx.font="500 26px Nunito, Arial, sans-serif";
-    cx.fillText(cortarTexto(cx,"WhatsApp +57 313 243 4760 · No. "+(consec||""),900),540,y+286);
+    /* WhatsApp de la config publicada (el panel lo cambia): misma fuente que el enlace wa.me. */
+    cx.fillText(cortarTexto(cx,"WhatsApp +57 "+fmtWa(CONFIG.whatsapp||TIENDA.whatsappPedidos)+" · No. "+(consec||""),900),540,y+286);
     cx.textAlign="left";
     const blob=await new Promise(function(res){cv.toBlob(res,"image/png");});
     return new File([blob],"pedido-juga.png",{type:"image/png"});

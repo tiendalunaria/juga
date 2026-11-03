@@ -27,7 +27,7 @@ sonrisas y códigos de producto `JUG-XXXX` (ver `JUGA_Brief_Branding.md`).
 | `data/configuracion.js` | Configuración publicada desde el panel ("Publicar para TODOS"). La mantiene el panel vía API de GitHub: nadie la edita a mano |
 | `legal.html` | 8 políticas con anclas; absorbe la configuración publicada (razón social, NIT, contacto) |
 | `scripts/sync_catalogos.py` | Lee el catálogo maestro publicado por la juguetería, lo convierte al formato JUGA, rehospeda las fotos nuevas y escribe `catalogo.js` |
-| `.github/workflows/sync-catalogos.yml` | Cron cada 6 horas (+ manual): clona la fuente, sincroniza, commitea y publica (con `pull --rebase` para absorber lo publicado por el panel) |
+| `.github/workflows/sync-catalogos.yml` | Cron cada 6 horas (+ manual): clona la fuente, sincroniza, commitea y publica (`pull --rebase` con 3 reintentos para absorber lo publicado por el panel; si la corrida falla abre issue `sync-catalogos`) |
 | `img/p/` | Miniaturas webp rehospedadas de los juguetes (hash del path de la fuente: rehost incremental) |
 | `generar_enlace_config.py` | **Local** (en `.gitignore`): arma el enlace de configuración de un solo toque (token) |
 | `GitHub.txt` | **Local** (en `.gitignore`): donde vive el token de GitHub |
@@ -93,7 +93,10 @@ siguiente de la galería → placeholder "JUGA" de la categoría.
 
 Cada 6 horas: checkout con historial completo → clonar la fuente → sync →
 `git add catalogo.js img` → si hay cambios: commit `[skip ci]` →
-**`git pull --rebase`** (absorbe lo publicado por el panel vía API) → push.
+**`git pull --rebase`** (absorbe lo publicado por el panel vía API) → push,
+con hasta 3 reintentos si el remoto se movió a mitad de publicación.
+Si la corrida falla (fuente caída, push rechazado), abre o comenta un issue
+`sync-catalogos` y lo cierra solo cuando una corrida se recupera.
 
 ---
 
@@ -177,10 +180,11 @@ carruseles, héroe, favoritos, buscador, upsells y footer.
   validación en vivo y consecutivo `PED-YYYYMMDD-NNN`.
 - **Vuelo al carrito** (WAAPI, respeta `prefers-reduced-motion`), badge con
   rebote y vibración en celulares.
-- **Pedido SIEMPRE directo por wa.me** al **+57 313 243 4760**: WhatsApp
-  abre con el chat listo; la hoja PNG del pedido se **descarga** para
-  adjuntarla en el mismo chat (logo JUGA, código `JUG-XXXX` por artículo,
-  Nequi 313 243 4760).
+- **Pedido SIEMPRE directo por wa.me** al WhatsApp de pedidos publicado en la
+  config (hoy **+57 313 659 4870**; se cambia desde el panel sin tocar
+  código): WhatsApp abre con el chat listo; la hoja PNG del pedido se
+  **descarga** para adjuntarla en el mismo chat (logo JUGA, código `JUG-XXXX`
+  por artículo, Nequi 313 243 4760).
 - **Buscador con cobertura total**: sin tildes/ñ, palabras sueltas en
   cualquier orden, código `JUG-XXXX` y SKU de la fuente.
 - Eventos para el Pixel de Meta: `PageView`, `ViewContent`, `AddToCart`,
@@ -201,7 +205,9 @@ y calendario). Suites:
   precio final consciente del margen publicado) corre diario a las 12:00 UTC
   vía `qa-smoke.yml`: checks de lectura (página, catálogo, configuración,
   imágenes, activos de marca, deploy de Pages). Falla → issue `qa-smoke` con
-  el log; se recupera → se cierra solo.
+  el log; se recupera → se cierra solo. El cron del catálogo
+  (`sync-catalogos.yml`) usa el mismo mecanismo: falla → issue
+  `sync-catalogos`; se recupera → se cierra.
 
 Verificación rápida de sintaxis del index:
 

@@ -115,8 +115,9 @@ Contra https://tiendalunaria.github.io/juga/ (solo lectura, sin comprar):
 | Datos | WhatsApp de prueba `573001112222` (patrón de la suite A/B); clon del catálogo recortado a 10 ítems para iterar rápido | suites |
 
 Reglas: nunca publicar a producción desde QA; nunca comprar real en pruebas;
-el WhatsApp de pedidos real (573132434760) solo se valida leyendo el enlace
-generado, no enviándolo.
+el WhatsApp de pedidos real (lo publica el panel: hoy 573136594870) solo se
+valida leyendo el enlace generado y por formato (57 + 10 dígitos), nunca
+enviándolo ni como literal en los checks.
 
 ---
 

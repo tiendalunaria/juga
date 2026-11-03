@@ -104,8 +104,18 @@ cron `catalogo.js` + `img/`: no hay conflicto posible).
 - El smoke L4 lee el margen de la config publicada y escala los rangos:
   vitrina $200–$600.000; precio final $200–$780.000 con margen 30 % (el techo
   del 2.4b se recalcula solo si se sube el margen).
+- El WhatsApp de pedidos lo publica el PANEL (cambió a +57 313 659 4870 en
+  nov-2026): los checks lo validan por FORMATO (57 + 10 dígitos) o contra
+  `CONFIG_PUBLICADA`, nunca como literal — misma regla que los precios.
 
 ## Gotchas conocidos
+
+- El número de WhatsApp de pedidos/atención lo publica el PANEL
+  (`data/configuracion.js`, hoy +57 313 659 4870): el de fábrica en el HTML
+  puede quedar viejo y eso es normal (lo publicado manda). El Nequi de pago
+  (313 243 4760) está aparte, hardcodeado en el HTML, y el panel NO lo
+  cambia: revisarlo a mano si cambia. La hoja de pedido PNG (canvas) imprime
+  el WhatsApp de la config (`CONFIG.whatsapp`), igual que el enlace wa.me.
 
 - GitHub Pages sirve el index con caché: al verificar un deploy usa
   cache-buster (`?t=` + fecha). El deploy tarda 1–3 min tras el push.
