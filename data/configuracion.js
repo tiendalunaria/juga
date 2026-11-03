@@ -2,12 +2,12 @@
 // (botón "Publicar para TODOS"). Se aplica a TODOS los visitantes de
 // https://tiendalunaria.github.io/juga/ — nadie necesita editar este archivo a mano.
 window.CONFIG_PUBLICADA = {
-  "version": 1793689055452,
+  "version": 1793689117435,
   "tienda": {
     "nombre": "JUGA",
     "logo": "logo_120.png",
-    "whatsappPedidos": "573132434760",
-    "whatsappAtencion": "",
+    "whatsappPedidos": "573136594870",
+    "whatsappAtencion": "573136594870",
     "razonSocial": "",
     "nit": "",
     "direccion": "",
