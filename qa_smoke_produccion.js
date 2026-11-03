@@ -31,7 +31,9 @@ const vivo = async (u) => { try { const r = await pedir(u, { method: "HEAD" }); 
   check(/og:title" content="JUGA — Regalos que despiertan sonrisas"/i.test(home.t), "1.3", "og:title oficial");
   check(/rel="icon" href="favicon\.ico"/.test(home.t), "1.4", "favicon enlazado");
   check(/fonts\.googleapis\.com[^"]*Baloo\+2/.test(home.t) && /fonts\.googleapis\.com[^"]*Nunito/.test(home.t), "1.5", "tipografias oficiales cargadas");
-  check(/wa\.me\/573132434760|573132434760/.test(home.t), "1.6", "WhatsApp de pedidos presente");
+  /* El enlace wa.me se arma en runtime desde la config (el panel cambia el
+     numero): se valida que el index declare un numero 57 + 10 digitos. */
+  check(/\b57\d{10}\b/.test(home.t), "1.6", "numero de WhatsApp de pedidos declarado en el index");
 
   /* 1.5 Configuración publicada: el margen vigente define el techo de los
      precios FINALES (vitrina × (1+margen) + redondeo). Se usa en 2.4b. */
@@ -71,7 +73,7 @@ const vivo = async (u) => { try { const r = await pedir(u, { method: "HEAD" }); 
     check(!/"claveAdmin"/.test(cfg.t), "4.3", "sin claveAdmin publicada");
     check(!/github_pat_/.test(cfg.t), "4.4", "sin token de GitHub publicado");
     check(typeof conf.version === "number", "4.5", "version numerica", conf.version);
-    check((conf.tienda || {}).whatsappPedidos === "573132434760", "4.6", "WhatsApp vigente en config publicada", (conf.tienda || {}).whatsappPedidos);
+    check(/^57\d{10}$/.test((conf.tienda || {}).whatsappPedidos || ""), "4.6", "whatsappPedidos con formato 57XXXXXXXXX en config publicada", (conf.tienda || {}).whatsappPedidos);
     check((conf.tienda || {}).nombre === "JUGA", "4.7", "nombre JUGA en config publicada", (conf.tienda || {}).nombre);
   }
 

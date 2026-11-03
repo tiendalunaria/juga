@@ -7,8 +7,8 @@
 # fuente de juguetes es el repo jugueteriataiwanoficial/jugueteriataiwan
 # (maestro); este sync lo absorbe tal cual: precios de vitrina finales.
 #
-# Requisito (una sola vez): Settings > Actions > General > Workflow permissions
-# debe estar en "Read and write permissions" para que el bot pueda hacer push.
+# El workflow declara permissions: contents: write, que sobrescribe el default
+# del repo: no hace falta tocar Settings > Actions > Workflow permissions.
 name: Sincronizar catalogo
 
 on:
@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  issues: write # alerta por issue si la corrida falla (fuente caida, push rechazado)
 
 concurrency:
   group: sync-catalogos
@@ -26,6 +27,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,7 +38,7 @@ jobs:
       - name: Sincronizar catalogo
         env:
           JUGA_FUENTE_LOCAL: /tmp/jugueteria
-        run: python scripts/sync_catalogos.py
+        run: python3 scripts/sync_catalogos.py
       - name: Publicar cambios (si los hay)
         run: |
           git config user.name  "tiendalunaria-bot"
@@ -48,11 +50,51 @@ jobs:
             # el repositorio quedo adelante: se absorbe con rebase (el panel
             # solo toca data/configuracion.js, nunca catalogo.js ni img/,
             # asi que no hay conflicto posible) y se reintenta el push.
-            if ! git pull --rebase origin main; then
-              echo "No se pudo absorber lo publicado por el panel; el catalogo se regenera en la proxima corrida."
+            publicado=""
+            for intento in 1 2 3; do
+              git rebase --abort >/dev/null 2>&1 || true
+              if git pull --rebase origin main && git push; then
+                publicado="si"
+                break
+              fi
+              echo "Intento $intento fallo; reintento en 15 s."
+              sleep 15
+            done
+            if [ -z "$publicado" ]; then
+              echo "No se pudo publicar tras 3 intentos; el catalogo se regenera en la proxima corrida."
               exit 1
             fi
-            git push
           else
             echo "Sin cambios: el catalogo ya estaba al dia."
           fi
+
+      - name: Abrir o actualizar issue si fallo
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {data: abiertas} = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: 'sync-catalogos', per_page: 1});
+            const cuerpo = '### 🔴 Sincronización del catálogo falló\n'
+              + 'Corrida: ' + new Date().toISOString() + ' ([log completo]('
+              + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo
+              + '/actions/runs/' + context.runId + '))\n'
+              + 'El catálogo vigente sigue publicado; la próxima corrida (6 h) lo reintenta.';
+            if (abiertas.length) {
+              await github.rest.issues.createComment({...context.repo, issue_number: abiertas[0].number, body: cuerpo});
+            } else {
+              await github.rest.issues.create({...context.repo, title: '🔴 Cron: sincronización de catálogo falló', labels: ['sync-catalogos'], body: cuerpo});
+            }
+
+      - name: Cerrar el issue si se recuperó
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {data: abiertas} = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: 'sync-catalogos', per_page: 100});
+            for (const i of abiertas) {
+              await github.rest.issues.createComment({...context.repo, issue_number: i.number,
+                body: '✅ Sincronización recuperada en ' + new Date().toISOString() + ' — cierro.'});
+              await github.rest.issues.update({...context.repo, issue_number: i.number, state: 'closed'});
+            }

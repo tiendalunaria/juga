@@ -20,11 +20,12 @@ concurrency:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24" # LTS vigente (Node 20 llego a EOL en abr-2026)
       - name: Smoke L4 contra produccion
         run: node qa_smoke_produccion.js
 
@@ -34,7 +35,11 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const log = fs.readFileSync('smoke_resultado.txt', 'utf8').slice(-3000);
+            // Si el runner corto el proceso (timeout/OOM) el archivo no existe:
+            // la alerta igual se abre, con nota de que no hay detalle.
+            const log = fs.existsSync('smoke_resultado.txt')
+              ? fs.readFileSync('smoke_resultado.txt', 'utf8').slice(-3000)
+              : '(sin smoke_resultado.txt: el proceso murio antes de escribirlo)';
             const {data: abiertas} = await github.rest.issues.listForRepo({
               ...context.repo, state: 'open', labels: 'qa-smoke', per_page: 1});
             const cuerpo = '### 🔴 Smoke L4 de producción falló\n'

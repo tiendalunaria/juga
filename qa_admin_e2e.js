@@ -113,8 +113,9 @@ async function entrar(page) {
     check("B4 copiar configuración: bloques TIENDA_DEFECTO + PRECIOS_DEFECTO con valores actuales",
       cb && /const TIENDA_DEFECTO=/.test(cb) && /const PRECIOS_DEFECTO=/.test(cb) && /TIENDA PRUEBA E2E/.test(cb), cb && cb.slice(0, 80));
     await page.evaluate(() => restaurarPanelAdmin());
-    const despues = await page.evaluate(() => ({ ls: localStorage.getItem("juga-tienda-v1"), nombre: TIENDA.nombre, wa: TIENDA.whatsappPedidos }));
-    check("B5 restaurar: limpia localStorage y vuelve a lo publicado", despues.ls === null && despues.nombre === "JUGA" && despues.wa === "573132434760", despues);
+    const despues = await page.evaluate(() => ({ ls: localStorage.getItem("juga-tienda-v1"), nombre: TIENDA.nombre, wa: TIENDA.whatsappPedidos,
+      esperadoWa: (window.CONFIG_PUBLICADA && window.CONFIG_PUBLICADA.tienda && window.CONFIG_PUBLICADA.tienda.whatsappPedidos) || TIENDA_DEFECTO.whatsappPedidos }));
+    check("B5 restaurar: limpia localStorage y vuelve a lo publicado (sin numero hardcodeado)", despues.ls === null && despues.nombre === "JUGA" && despues.wa === despues.esperadoWa, despues);
     const preview = await page.evaluate(() => { document.getElementById("adminMargen").value = "25"; document.getElementById("adminMultiplicador").value = "1"; document.getElementById("adminRedondeo").value = "100"; pintarPreviewAdmin(); return document.getElementById("adminPreview").textContent; });
     check("B6 preview: costo $10.000 con 25% -> $12.500", /\$12\.500/.test(preview), preview);
     await ctx.close();
