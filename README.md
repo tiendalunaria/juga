@@ -27,7 +27,7 @@ sonrisas y códigos de producto `JUG-XXXX` (ver `JUGA_Brief_Branding.md`).
 | `data/configuracion.js` | Configuración publicada desde el panel ("Publicar para TODOS"). La mantiene el panel vía API de GitHub: nadie la edita a mano |
 | `legal.html` | 8 políticas con anclas; absorbe la configuración publicada (razón social, NIT, contacto) |
 | `scripts/sync_catalogos.py` | Lee el catálogo maestro publicado por la juguetería, lo convierte al formato JUGA, rehospeda las fotos nuevas y escribe `catalogo.js` |
-| `.github/workflows/sync-catalogos.yml` | Cron cada 6 horas (+ manual): clona la fuente, sincroniza, commitea y publica (`pull --rebase` con 3 reintentos para absorber lo publicado por el panel; si la corrida falla abre issue `sync-catalogos`) |
+| `.github/workflows/sync-catalogos.yml` | Cron cada 6 horas (+ manual): clona la fuente, sincroniza, commitea y publica (`pull --rebase` con 3 reintentos para absorber lo publicado por el panel) y VERIFICA que el deploy de Pages del commit terminó bien (si falla: rebuild por API de Pages y re-verificación; si persiste, la corrida falla). Cualquier fallo abre issue `sync-catalogos`; la recuperación lo cierra sola |
 | `img/p/` | Miniaturas webp rehospedadas de los juguetes (hash del path de la fuente: rehost incremental) |
 | `generar_enlace_config.py` | **Local** (en `.gitignore`): arma el enlace de configuración de un solo toque (token) |
 | `GitHub.txt` | **Local** (en `.gitignore`): donde vive el token de GitHub |
@@ -91,12 +91,22 @@ siguiente de la galería → placeholder "JUGA" de la categoría.
 
 ### 2.5 Cron de GitHub Actions
 
-Cada 6 horas: checkout con historial completo → clonar la fuente → sync →
-`git add catalogo.js img` → si hay cambios: commit `[skip ci]` →
-**`git pull --rebase`** (absorbe lo publicado por el panel vía API) → push,
-con hasta 3 reintentos si el remoto se movió a mitad de publicación.
-Si la corrida falla (fuente caída, push rechazado), abre o comenta un issue
-`sync-catalogos` y lo cierra solo cuando una corrida se recupera.
+Cada 6 horas: checkout con historial completo → `git pull --rebase` (la rama
+arranca al día por si el panel publicó mientras la corrida esperaba) →
+clonar la fuente → sync → `git add catalogo.js img` → si hay cambios:
+commit `[skip ci]` → **`git pull --rebase`** (absorbe lo publicado por el
+panel vía API) → push, con hasta 3 reintentos si el remoto se movió a
+mitad de publicación. Tras el push, la corrida **verifica el deploy de
+Pages del commit** (el run "pages build and deployment" lleva el SHA del
+push): si falla, pide un rebuild por la API de Pages y re-verifica; si
+vuelve a fallar, la corrida falla. Si no hubo cambios pero el último
+deploy de Pages quedó fallando, también se reclama con un rebuild y se
+falla para mantener la alerta viva.
+Si la corrida falla (fuente caída, push rechazado, deploy de Pages
+fallido), abre o comenta un issue `sync-catalogos` y lo cierra solo
+cuando una corrida se recupera. (Antecedente: el 7-nov-2026 el deploy
+del commit `1fa83f0e` falló de forma transitoria y el catálogo nuevo
+tardó ~6 h en verse; ese caso ahora se cura solo o avisa.)
 
 ---
 

@@ -7,6 +7,12 @@
 # fuente de juguetes es el repo jugueteriataiwanoficial/jugueteriataiwan
 # (maestro); este sync lo absorbe tal cual: precios de vitrina finales.
 #
+# Tras publicar, la corrida VERIFICA que el deploy de Pages del commit
+# termino bien: el 7-nov-2026 el build del commit 1fa83f0e quedo commiteado
+# ~6 horas sin desplegarse (fallo transitorio del job deploy) y nadie se
+# entero. Ahora un deploy fallido se reintenta en la misma corrida y, si
+# persiste, la corrida falla y el issue de abajo se abre igual.
+#
 # El workflow declara permissions: contents: write, que sobrescribe el default
 # del repo: no hace falta tocar Settings > Actions > Workflow permissions.
 name: Sincronizar catalogo
@@ -18,7 +24,7 @@ on:
 
 permissions:
   contents: write
-  issues: write # alerta por issue si la corrida falla (fuente caida, push rechazado)
+  issues: write # alerta por issue si la corrida falla (fuente caida, push rechazado, deploy fallido)
 
 concurrency:
   group: sync-catalogos
@@ -33,6 +39,8 @@ jobs:
         with:
           fetch-depth: 0   # historial completo: el panel publica data/configuracion.js
                            # por API mientras el cron corre; el push seguro lo absorbe
+      - name: Poner la rama al dia (el panel pudo publicar mientras la corrida esperaba)
+        run: git pull --rebase origin main
       - name: Clonar la fuente de juguetes (catalogo maestro de la jugueteria)
         run: git clone --depth 1 https://github.com/jugueteriataiwanoficial/jugueteriataiwan /tmp/jugueteria
       - name: Sincronizar catalogo
@@ -40,6 +48,7 @@ jobs:
           JUGA_FUENTE_LOCAL: /tmp/jugueteria
         run: python3 scripts/sync_catalogos.py
       - name: Publicar cambios (si los hay)
+        id: publicar
         run: |
           git config user.name  "tiendalunaria-bot"
           git config user.email "tiendalunaria@users.noreply.github.com"
@@ -64,8 +73,101 @@ jobs:
               echo "No se pudo publicar tras 3 intentos; el catalogo se regenera en la proxima corrida."
               exit 1
             fi
+            echo "publicado=si" >> "$GITHUB_OUTPUT"
           else
             echo "Sin cambios: el catalogo ya estaba al dia."
+          fi
+
+      # El push dispara un "pages build and deployment" con head_sha = commit
+      # publicado. Se espera su resultado (los deploys tardan ~1-3 min); si
+      # falla, se pide un rebuild por la API de Pages y se re-verifica: el
+      # fallo transitorio se cura solo y el persistente abre el issue.
+      - name: Verificar el deploy de Pages del commit publicado
+        if: steps.publicar.outputs.publicado == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          REPO="${{ github.repository }}"
+          ULTIMO() {
+            gh api "repos/$REPO/actions/runs?per_page=20" \
+              --jq '[.workflow_runs[] | select(.name == "pages build and deployment" and .head_sha == "'"$SHA"'")] | sort_by(.id) | last // empty' 2>/dev/null || true
+          }
+          ESPERA() {
+            for intento in $(seq 1 16); do
+              sleep 30
+              RUN=$(ULTIMO)
+              if [ -z "$RUN" ]; then
+                echo "  intento $intento: el deploy de Pages aun no aparece (~1-3 min)."
+                continue
+              fi
+              ESTADO=$(echo "$RUN" | jq -r .status)
+              RESULTADO=$(echo "$RUN" | jq -r '.conclusion // ""')
+              if [ "$ESTADO" = "completed" ]; then
+                echo "$RESULTADO"
+                return 0
+              fi
+              echo "  intento $intento: deploy en progreso..."
+            done
+            echo "sin-senal"
+          }
+          echo "Commit publicado: $SHA — esperando el deploy de Pages..."
+          RESULTADO=$(ESPERA)
+          if [ "$RESULTADO" = "sin-senal" ]; then
+            echo "El deploy no termino dentro de la ventana (8 min): el smoke diario L4 (check 6.1) lo vigila."
+            exit 0
+          fi
+          if [ "$RESULTADO" != "success" ]; then
+            echo "Deploy fallido ($RESULTADO): se pide un rebuild a la API de Pages y se re-verifica..."
+            gh api -X POST "repos/$REPO/pages/builds" >/dev/null 2>&1 || true
+            RESULTADO=$(ESPERA)
+          fi
+          if [ "$RESULTADO" != "success" ] && [ "$RESULTADO" != "sin-senal" ]; then
+            echo "::error::El deploy de Pages del commit $SHA fallo dos veces ($RESULTADO): el sitio sigue sirviendo el catalogo anterior hasta el proximo push (max 6 h)."
+            exit 1
+          fi
+          echo "Deploy de Pages del commit $SHA: $RESULTADO."
+
+      # Sin cambios que publicar, el estado del ultimo deploy TAMBIEN manda:
+      # si el ultimo "pages build and deployment" quedo fallando, la corrida
+      # falla para que el issue siga abierto hasta que el sitio este sano.
+      - name: Vigilar el ultimo deploy de Pages (si no se publico nada)
+        if: steps.publicar.outputs.publicado != 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REPO="${{ github.repository }}"
+          ULTIMO=$(gh api "repos/$REPO/actions/runs?per_page=20" \
+            --jq '[.workflow_runs[] | select(.name == "pages build and deployment")] | sort_by(.id) | last // empty' 2>/dev/null || true)
+          if [ -z "$ULTIMO" ]; then
+            echo "Sin runs de Pages a la vista: nada que vigilar."
+            exit 0
+          fi
+          ESTADO=$(echo "$ULTIMO" | jq -r .status)
+          RESULTADO=$(echo "$ULTIMO" | jq -r '.conclusion // ""')
+          if [ "$ESTADO" = "completed" ] && [ "$RESULTADO" != "success" ]; then
+            SHA=$(echo "$ULTIMO" | jq -r .head_sha)
+            echo "::warning::El ultimo deploy de Pages ($SHA) quedo en '$RESULTADO'. Se pide un rebuild..."
+            gh api -X POST "repos/$REPO/pages/builds" >/dev/null 2>&1 || true
+            VERIFICACION=""
+            for intento in $(seq 1 10); do
+              sleep 30
+              VERIFICACION=$(gh api "repos/$REPO/actions/runs?per_page=20" \
+                --jq "[.workflow_runs[] | select(.name == \"pages build and deployment\" and .head_sha == \"$SHA\")] | sort_by(.id) | last | .status + \":\" + (.conclusion // \"\")" 2>/dev/null || true)
+              if [ "${VERIFICACION%%:*}" = "completed" ]; then
+                VERIFICACION="${VERIFICACION#*:}"
+                break
+              fi
+              echo "  intento $intento: rebuild en progreso ($VERIFICACION)..."
+              VERIFICACION=""
+            done
+            if [ "$VERIFICACION" != "success" ]; then
+              echo "::error::El sitio sigue desactualizado: el deploy del commit $SHA no se recupero (${VERIFICACION:-sin senal})."
+              exit 1
+            fi
+            echo "Rebuild exitoso: el deploy del commit $SHA quedo en success."
+          else
+            echo "Ultimo deploy de Pages: $RESULTADO (estado $ESTADO)."
           fi
 
       - name: Abrir o actualizar issue si fallo
